@@ -6,10 +6,10 @@ import (
 	"reflect"
 )
 
+const structTAG = "qp"
+
 // ParseURLQuery parses the URL query parameters and assigns them to the struct fields
-// Using the qp tag to map the query parameter to the struct field.
-// A Non Pointer field is must be provided in the query parameter.
-// If we want a nullable field, we should use a pointer field.
+// Using the qp struct tag to map the query parameter to the struct field.
 func ParseURLQuery(r *http.Request, st any) error {
 	v, err := reflecter(st)
 	if err != nil {
@@ -25,7 +25,7 @@ func ParseURLQuery(r *http.Request, st any) error {
 		fieldValue := v.Field(i)
 
 		// Retrieve the qp tag value
-		tag := fieldType.Tag.Get("qp")
+		tag := fieldType.Tag.Get(structTAG)
 		if tag == "" {
 			continue
 		}

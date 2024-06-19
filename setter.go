@@ -24,7 +24,7 @@ func (f field) Set(val string) error {
 	// Handle pointer field, by dereferencing it
 	if f.refVal.Kind() == reflect.Ptr {
 		if f.refVal.IsNil() {
-			// Since pointer field is allowed to be nil, we should return nil if the value is empty.
+			// If the value is empty, let the field value remain nil
 			if val == "" {
 				return nil
 			}
@@ -33,34 +33,27 @@ func (f field) Set(val string) error {
 		f.refVal = f.refVal.Elem()
 	}
 
-	if val == "" {
-		return fmt.Errorf("empty value for field %s", f.refType.Name)
-	}
-
+	var err error
+	// Check if the field is settable
 	if f.refVal.CanSet() {
-		if setter, ok := setters[f.refVal.Kind()]; ok {
-			return setter(f, val)
+		switch f.refVal.Kind() {
+		case reflect.String:
+			f.refVal.SetString(val)
+		case reflect.Bool:
+			err = f.setBool(val)
+		case reflect.Float64, reflect.Float32:
+			err = f.setFloat(val)
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			err = f.setInt(val)
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			err = f.setUint(val)
+		default:
+			err = fmt.Errorf("qparser: unsupported kind %s for field %s", f.refVal.Kind(), f.refType.Name)
 		}
-		return fmt.Errorf("unsupported kind %s for field %s", f.refVal.Kind(), f.refType.Name)
+	} else {
+		err = fmt.Errorf("qparser: cannot set field %s", f.refType.Name)
 	}
-	return fmt.Errorf("cannot set field %s", f.refType.Name)
-}
-
-var setters = map[reflect.Kind]setter{
-	reflect.String:  (field).setString,
-	reflect.Bool:    (field).setBool,
-	reflect.Float64: (field).setFloat,
-	reflect.Float32: (field).setFloat,
-	reflect.Int:     (field).setInt,
-	reflect.Int8:    (field).setInt,
-	reflect.Int16:   (field).setInt,
-	reflect.Int32:   (field).setInt,
-	reflect.Int64:   (field).setInt,
-	reflect.Uint:    (field).setUint,
-	reflect.Uint8:   (field).setUint,
-	reflect.Uint16:  (field).setUint,
-	reflect.Uint32:  (field).setUint,
-	reflect.Uint64:  (field).setUint,
+	return err
 }
 
 func (f field) bitSize() int {
@@ -76,13 +69,6 @@ func (f field) bitSize() int {
 	default:
 		return 0
 	}
-}
-
-type setter func(f field, v string) error
-
-func (f field) setString(v string) error {
-	f.refVal.SetString(v)
-	return nil
 }
 
 func (f field) setBool(v string) error {
