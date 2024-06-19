@@ -29,7 +29,7 @@ func MyHandler(w http.ResponseWriter, r *http.Request) {
 }
 ```
 By default, it does not validate empty query values. To perform empty value validation or implement some business rules validation, you can create your own validator or use a validator package like [validator](https://github.com/go-playground/validator).
-#### Supported field types
+## Supported field types
 Currently, it only supports basic primitive types such as:
 - String
 - Boolean
@@ -38,11 +38,11 @@ Currently, it only supports basic primitive types such as:
 - Floats (float64 and float32)
 - A pointer to one of above
 
-#### Future plans
+## Future plans
 - Support for various types such as slice/array and nested struct
 - Default value mechanism
 - Mapped Errors
 
-#### Contribution
-Contributions are welcome! If you have any improvements, bug fixes, or new features you'd like to add, please let me know.\
-CONTRIBUTION GUIDE SOON!
+## Contribution
+CONTRIBUTION GUIDE SOON!\
+Contributions are welcome! If you have any improvements, bug fixes, or new features you'd like to add, please let me know.
