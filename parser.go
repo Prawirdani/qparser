@@ -9,8 +9,9 @@ import (
 
 const structTAG = "qp"
 
-// ParseURLQuery parses the URL query parameters and assigns them to the struct fields
-// Using the qp struct tag to map the query parameter to the struct field.
+// ParseURLQuery parses the URL query parameters from the HTTP request and sets the corresponding fields in the struct.
+// The struct fields must have a `qp` tag with the query parameter name.
+// Fields with a `qp` tag value of "-" will be ignored.
 func ParseURLQuery(r *http.Request, st any) error {
 	v, err := reflecter(st)
 	if err != nil {
@@ -32,9 +33,14 @@ func ParseURLQuery(r *http.Request, st any) error {
 		}
 		// Retrieve the query parameter value
 		queryValue := r.URL.Query().Get(tag)
-		f := registerField(fieldType, fieldValue)
 
-		if err := f.Set(queryValue); err != nil {
+		if queryValue == "" {
+			continue
+		}
+
+		f := registerField(fieldType, fieldValue, queryValue)
+
+		if err := f.SetValue(); err != nil {
 			return err
 		}
 	}
