@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
 )
 
 const structTAG = "qp"
@@ -25,8 +26,8 @@ func ParseURLQuery(r *http.Request, st any) error {
 		fieldValue := v.Field(i)
 
 		// Retrieve the qp tag value
-		tag := fieldType.Tag.Get(structTAG)
-		if tag == "" {
+		tag := strings.TrimSpace(fieldType.Tag.Get(structTAG))
+		if tag == "" || tag == "-" {
 			continue
 		}
 		// Retrieve the query parameter value
