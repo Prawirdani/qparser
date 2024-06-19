@@ -21,6 +21,7 @@ func ParseURLQuery(r *http.Request, st any) error {
 	v = v.Elem()
 	t := v.Type()
 
+	queryValues := r.URL.Query()
 	// Iterate over the struct fields
 	for i := 0; i < t.NumField(); i++ {
 		fieldType := t.Field(i)
@@ -32,7 +33,7 @@ func ParseURLQuery(r *http.Request, st any) error {
 			continue
 		}
 		// Retrieve the query parameter value
-		queryValue := r.URL.Query().Get(tag)
+		queryValue := queryValues.Get(tag)
 
 		if queryValue == "" {
 			continue
