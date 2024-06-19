@@ -5,7 +5,7 @@ This package is still under development and not ready for production use.\
 
 ## Installation
 ```bash
-go get github.com/prawirdani/qparser
+go get -u github.com/prawirdani/qparser
 ```
 
 ## Example
