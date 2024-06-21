@@ -9,10 +9,10 @@ import (
 
 const structTAG = "qp"
 
-// ParseURLQuery parses the URL query parameters from the HTTP request and sets the corresponding fields in the struct.
+// ParseRequest parses the URL query parameters from the HTTP request and sets the corresponding fields in the struct.
 // The struct fields must have a `qp` tag with the query parameter name.
 // Fields with a `qp` tag value of "-" will be ignored.
-func ParseURLQuery(r *http.Request, st any) error {
+func ParseRequest(r *http.Request, st any) error {
 	v, err := reflecter(st)
 	if err != nil {
 		return err
@@ -24,14 +24,15 @@ func ParseURLQuery(r *http.Request, st any) error {
 	queryValues := r.URL.Query()
 	// Iterate over the struct fields
 	for i := 0; i < t.NumField(); i++ {
-		fieldType := t.Field(i)
+		fieldMetadata := t.Field(i)
 		fieldValue := v.Field(i)
 
 		// Retrieve the qp tag value
-		tag := strings.TrimSpace(fieldType.Tag.Get(structTAG))
+		tag := strings.TrimSpace(fieldMetadata.Tag.Get(structTAG))
 		if tag == "" || tag == "-" {
 			continue
 		}
+
 		// Retrieve the query parameter value
 		queryValue := queryValues.Get(tag)
 
@@ -39,11 +40,15 @@ func ParseURLQuery(r *http.Request, st any) error {
 			continue
 		}
 
-		f := registerField(fieldType, fieldValue, queryValue)
-
-		if err := f.SetValue(); err != nil {
-			return err
+		if fieldValue.CanSet() {
+			err := SetValue(fieldValue, queryValue)
+			if err != nil {
+				return fmt.Errorf("%s %s(%s)", err.Error(), fieldMetadata.Name, fieldMetadata.Type)
+			}
+		} else {
+			return fmt.Errorf("qparser: cannot set field %s", fieldMetadata.Name)
 		}
+
 	}
 	return nil
 }
@@ -53,7 +58,7 @@ func reflecter(st any) (reflect.Value, error) {
 	var err error
 	v := reflect.ValueOf(st)
 	if v.Kind() != reflect.Ptr || v.Elem().Kind() != reflect.Struct {
-		err = fmt.Errorf("st must be a pointer to a struct")
+		err = fmt.Errorf("qparser: st must be a pointer to a struct")
 	}
 	return v, err
 }

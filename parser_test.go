@@ -46,7 +46,7 @@ func TestParseS1(t *testing.T) {
 
 		handlerFn := func(w http.ResponseWriter, r *http.Request) {
 			var parsed s1
-			err := ParseURLQuery(r, &parsed)
+			err := ParseRequest(r, &parsed)
 			require.Nil(t, err, fmt.Sprintf("Error parsing query: %s", err))
 			require.Equal(t, expected.F1, parsed.F1)
 			require.Equal(t, expected.F2, parsed.F2)
@@ -72,7 +72,7 @@ func TestParseS1(t *testing.T) {
 		rr := httptest.NewRecorder()
 		handlerFn := func(w http.ResponseWriter, r *http.Request) {
 			var parsed s1
-			err := ParseURLQuery(r, &parsed)
+			err := ParseRequest(r, &parsed)
 			t.Log(err)
 			require.NotNil(t, err, "Error expected")
 			w.Write([]byte("Pass"))
@@ -114,7 +114,7 @@ func TestParseS2(t *testing.T) {
 
 		handlerFn := func(w http.ResponseWriter, r *http.Request) {
 			var parsed s2
-			err := ParseURLQuery(r, &parsed)
+			err := ParseRequest(r, &parsed)
 			require.Nil(t, err, fmt.Sprintf("Error parsing query: %s", err))
 			require.Equal(t, expected.F1, parsed.F1)
 			require.Equal(t, expected.F2, parsed.F2)
@@ -140,11 +140,72 @@ func TestParseS2(t *testing.T) {
 
 		handlerFn := func(w http.ResponseWriter, r *http.Request) {
 			var parsed s2
-			err := ParseURLQuery(r, &parsed)
+			err := ParseRequest(r, &parsed)
 			t.Log(err)
 			require.NotNil(t, err, "Error expected")
 			w.Write([]byte("Pass"))
 		}
 		http.HandlerFunc(handlerFn).ServeHTTP(rr, req)
+	})
+}
+
+type s3 struct {
+	F1 []string  `qp:"f1"`
+	F2 []*int    `qp:"f2"`
+	F3 []float64 `qp:"f3"`
+	F4 []int8    `qp:"f4"`
+	F5 []int     `qp:"f5"`
+}
+
+func TestParseS3(t *testing.T) {
+	t.Run("filled", func(t *testing.T) {
+		queryParams := "f1=foo,bar,baz,qux&f2=1,2,3&f3=1.1,2.2,3.3&f4=1,2,3&f5=69,420"
+		f2_1 := 1
+		f2_2 := 2
+		f2_3 := 3
+		expected := s3{
+			F1: []string{"foo", "bar", "baz", "qux"},
+			F2: []*int{&f2_1, &f2_2, &f2_3},
+			F3: []float64{1.1, 2.2, 3.3},
+			F4: []int8{1, 2, 3},
+			F5: []int{69, 420},
+		}
+
+		req, err := http.NewRequest("GET", "http://example.com?"+queryParams, nil)
+		require.Nil(t, err, fmt.Sprintf("Error creating request: %s", err))
+
+		rr := httptest.NewRecorder()
+
+		handlerFn := func(w http.ResponseWriter, r *http.Request) {
+			var parsed s3
+			err := ParseRequest(r, &parsed)
+			require.Nil(t, err, fmt.Sprintf("Error parsing query: %s", err))
+			require.Equal(t, expected.F1, parsed.F1)
+			require.Equal(t, expected.F2, parsed.F2)
+			require.Equal(t, expected.F3, parsed.F3)
+			require.Equal(t, expected.F4, parsed.F4)
+			require.Equal(t, expected.F5, parsed.F5)
+			w.Write([]byte("Pass"))
+		}
+
+		http.HandlerFunc(handlerFn).ServeHTTP(rr, req)
+	})
+
+	t.Run("invalid", func(t *testing.T) {
+		queryParams := "f1=foo,bar,baz,qux&f4=1,2,255"
+		req, err := http.NewRequest("GET", "http://example.com?"+queryParams, nil)
+		require.Nil(t, err, fmt.Sprintf("Error creating request: %s", err))
+
+		rr := httptest.NewRecorder()
+
+		handlerFn := func(w http.ResponseWriter, r *http.Request) {
+			var parsed s3
+			err := ParseRequest(r, &parsed)
+			t.Log(err)
+			require.NotNil(t, err, "Error expected")
+			w.Write([]byte("Pass"))
+		}
+		http.HandlerFunc(handlerFn).ServeHTTP(rr, req)
+
 	})
 }

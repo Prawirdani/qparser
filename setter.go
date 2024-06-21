@@ -4,123 +4,122 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 )
 
-// field represents each field in the target struct with its reflection metadata and string value from query parameter.
-type field struct {
-	refField reflect.StructField
-	refVal   reflect.Value
-	value    string
+// A Function that set query parameter value to the reflected value from the struct field.
+type Setter func(value string) reflect.Value
+
+// Basic types setters
+var setters = map[reflect.Kind]Setter{
+	reflect.String:  setStr,
+	reflect.Bool:    setBool,
+	reflect.Int:     setInt(0),
+	reflect.Int8:    setInt(8),
+	reflect.Int16:   setInt(16),
+	reflect.Int32:   setInt(32),
+	reflect.Int64:   setInt(64),
+	reflect.Uint:    setUint(0),
+	reflect.Uint8:   setUint(8),
+	reflect.Uint16:  setUint(16),
+	reflect.Uint32:  setUint(32),
+	reflect.Uint64:  setUint(64),
+	reflect.Float32: setFloat(32),
+	reflect.Float64: setFloat(64),
 }
 
-// registerField initializes a new field struct with the given reflection metadata and value.
-func registerField(t reflect.StructField, v reflect.Value, queryVal string) *field {
-	return &field{
-		refField: t,
-		refVal:   v,
-		value:    queryVal,
-	}
-}
+var invalidReflect = reflect.Value{}
 
-// SetValue assigns the value to the field and converts it to the correct type.
-// It handles pointer fields by dereferencing them and sets the value only if the field is settable.
-func (f *field) SetValue() error {
+// Multiple query parameter values separator
+const SEPARATOR = ","
+
+// SetValue sets the query parameter value to the reflected value from the struct field.
+func SetValue(v reflect.Value, queryValue string) error {
 	// Handle pointer field, by dereferencing it
-	if f.refVal.Kind() == reflect.Ptr {
-		if f.refVal.IsNil() {
-			// If the value is empty, let the field value remain nil
-			if f.value == "" {
-				return nil
+	if v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			v.Set(reflect.New(v.Type().Elem()))
+		}
+		v = v.Elem()
+	}
+
+	if v.Kind() == reflect.Slice {
+		values := func() (result []string) {
+			for _, value := range strings.Split(queryValue, SEPARATOR) {
+				if value = strings.TrimSpace(value); value != "" {
+					result = append(result, value)
+				}
 			}
-			f.refVal.Set(reflect.New(f.refVal.Type().Elem()))
+			return result
+		}()
+
+		// Create a new slice with the same type and length as the values
+		cpSlice := reflect.MakeSlice(v.Type(), len(values), len(values))
+
+		for i, value := range values {
+			item := cpSlice.Index(i)
+
+			if err := SetValue(item, value); err != nil {
+				return err
+			}
 		}
-		f.refVal = f.refVal.Elem()
+		v.Set(cpSlice)
+		return nil
 	}
 
-	var err error
-	// Check if the field is settable
-	if f.refVal.CanSet() {
-		switch f.refVal.Kind() {
-		case reflect.String:
-			f.refVal.SetString(f.value)
-		case reflect.Bool:
-			err = f.setBool()
-		case reflect.Float64, reflect.Float32:
-			err = f.setFloat()
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			err = f.setInt()
-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			err = f.setUint()
-		default:
-			err = fmt.Errorf("qparser: unsupported kind %s for field %s", f.refVal.Kind(), f.refField.Name)
+	set, ok := setters[v.Kind()]
+	if !ok {
+		return fmt.Errorf("qparser: unsupported kind %s", v.Kind())
+	}
+
+	value := set(queryValue)
+	if !value.IsValid() || value == invalidReflect {
+		return fmt.Errorf("qparser: invalid value '%s' for field", queryValue)
+	}
+
+	v.Set(value.Convert(v.Type()))
+
+	return nil
+}
+
+func setStr(value string) reflect.Value {
+	return reflect.ValueOf(value)
+}
+
+func setBool(value string) reflect.Value {
+	v, err := strconv.ParseBool(value)
+	if err != nil {
+		return invalidReflect
+	}
+	return reflect.ValueOf(v)
+}
+
+func setInt(bitSize int) Setter {
+	return func(value string) reflect.Value {
+		v, err := strconv.ParseInt(value, 10, bitSize)
+		if err != nil {
+			return invalidReflect
 		}
-	} else {
-		err = fmt.Errorf("qparser: cannot set field %s", f.refField.Name)
-	}
-	return err
-}
-
-// bitSize determines the bit size of the field for integer and float types.
-func (f *field) bitSize() int {
-	switch f.refField.Type.Kind() {
-	case reflect.Int8, reflect.Uint8:
-		return 8
-	case reflect.Int16, reflect.Uint16:
-		return 16
-	case reflect.Int32, reflect.Uint32, reflect.Float32:
-		return 32
-	case reflect.Int64, reflect.Uint64, reflect.Float64:
-		return 64
-	default:
-		return 0
+		return reflect.ValueOf(v)
 	}
 }
 
-func (f *field) setBool() error {
-	val, err := strconv.ParseBool(f.value)
-	if err != nil {
-		return f.whichErr(err)
-	}
-	f.refVal.SetBool(val)
-	return nil
-}
-
-func (f *field) setFloat() error {
-	val, err := strconv.ParseFloat(f.value, f.bitSize())
-	if err != nil {
-		return f.whichErr(err)
-	}
-	f.refVal.SetFloat(val)
-	return nil
-}
-
-func (f *field) setInt() error {
-	val, err := strconv.ParseInt(f.value, 10, f.bitSize())
-	if err != nil {
-		return f.whichErr(err)
-	}
-	f.refVal.SetInt(val)
-	return nil
-}
-
-func (f *field) setUint() error {
-	val, err := strconv.ParseUint(f.value, 10, f.bitSize())
-	if err != nil {
-		return f.whichErr(err)
-	}
-	f.refVal.SetUint(val)
-	return nil
-}
-
-// whichErr wraps the error with additional context about the field and value.
-func (f *field) whichErr(err error) error {
-	switch e := err.(type) {
-	case *strconv.NumError:
-		if e.Err == strconv.ErrRange {
-			return fmt.Errorf("value %q out of range for %s(%s) field", f.value, f.refField.Name, f.refField.Type)
+func setUint(bitSize int) Setter {
+	return func(value string) reflect.Value {
+		v, err := strconv.ParseUint(value, 10, bitSize)
+		if err != nil {
+			return invalidReflect
 		}
-		return fmt.Errorf("invalid value %q for %s(%s) field", f.value, f.refField.Name, f.refField.Type)
-	default:
-		return err
+		return reflect.ValueOf(v)
+	}
+}
+
+func setFloat(bitSize int) Setter {
+	return func(value string) reflect.Value {
+		v, err := strconv.ParseFloat(value, bitSize)
+		if err != nil {
+			return invalidReflect
+		}
+		return reflect.ValueOf(v)
 	}
 }
