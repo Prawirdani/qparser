@@ -29,6 +29,25 @@ func MyHandler(w http.ResponseWriter, r *http.Request) {
 }
 ```
 By default, it does not validate empty query values. To perform empty value validation or implement some business rules validation, you can create your own validator or use a validator package like [validator](https://github.com/go-playground/validator).
+
+### Multiple Values Query
+To allow multiple values for a single query parameter, you can use a slice type in the struct. Here's an example:
+```go
+// Representing filter for menu
+type MenuFilter struct {
+	Categories []string `qp:"categories"`
+}
+
+func GetMenus(w http.ResponseWriter, r *http.Request) {
+	var f MenuFilter
+	if err := qparser.ParseRequest(r, &f); err != nil {
+        // Handle Error
+	}
+    // Do something with f.Categories
+}
+```
+The multiple values are separated by comma `,` in the query string. For example, `/menus?categories=desserts,beverages`. I'm planning to add custom separator in the future.
+
 ## Supported field types
 Currently, it only supports basic primitive types such as:
 - String
