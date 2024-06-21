@@ -46,7 +46,7 @@ func GetMenus(w http.ResponseWriter, r *http.Request) {
     // Do something with f.Categories
 }
 ```
-The multiple values are separated by comma `,` in the query string. For example, `/menus?categories=desserts,beverages`. I'm planning to add custom separator in the future.
+The multiple values are separated by comma `,` in the query string. For example, `/menus?categories=desserts,beverages`.
 
 ## Supported field types
 Currently, it only supports basic primitive types such as:
@@ -62,6 +62,7 @@ Currently, it only supports basic primitive types such as:
 - Support for various types such as multidimensional slice and nested struct
 - Default value mechanism
 - Mapped Errors
+- Custom multivalues separator
 
 ## Contribution
 CONTRIBUTION GUIDE SOON!\
