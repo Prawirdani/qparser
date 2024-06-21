@@ -1,7 +1,7 @@
 ## ⚠️ Warning ⚠️
 This package is still under development and not ready for production use.\
 \
-`qparser` is a simple package that help parse query parameters into struct in Go. It is inspired by [gorilla/schema](https://github.com/gorilla/schema) with main focus on query parameters. Built on top of Go stdlib, it uses custom struct tag `qp` to define the query parameter key and Go `url` package to retrieve the URL query values.
+`qparser` is a simple package that help parse query parameters into struct in Go. It is inspired by [gorilla/schema](https://github.com/gorilla/schema) with main focus on query parameters. Built on top of Go stdlib, it uses custom struct tag `qp` to define the query parameter key and Go `net/http` package to retrieve the URL query values and heavily relies on `strconv` package to convert string values into desired types.
 
 ## Installation
 ```bash
@@ -20,7 +20,7 @@ type Pagination struct {
 func MyHandler(w http.ResponseWriter, r *http.Request) {
 	var pagination Pagination
 	
-	err := qparser.ParseURLQuery(r, &pagination)
+	err := qparser.ParseRequest(r, &pagination)
 	if err != nil {
 		// Handle Error
 	}
@@ -36,10 +36,11 @@ Currently, it only supports basic primitive types such as:
 - Integers (int, int8, int16, int32 and int64)
 - Unsigned Integers (uint, uint8, uint16, uint32 and uint64)
 - Floats (float64 and float32)
+- Slice of above types
 - A pointer to one of above
 
 ## Future plans
-- Support for various types such as slice/array and nested struct
+- Support for various types such as multidimensional slice and nested struct
 - Default value mechanism
 - Mapped Errors
 
