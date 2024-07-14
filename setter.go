@@ -69,12 +69,12 @@ func SetValue(v reflect.Value, queryValue string) error {
 
 	set, ok := setters[v.Kind()]
 	if !ok {
-		return fmt.Errorf("qparser: unsupported kind %s", v.Kind())
+		return fmt.Errorf("unsupported kind %s", v.Kind())
 	}
 
 	value := set(queryValue)
 	if !value.IsValid() || value == invalidReflect {
-		return fmt.Errorf("qparser: invalid value '%s' for field", queryValue)
+		return fmt.Errorf("invalid value '%s' for field", queryValue)
 	}
 
 	v.Set(value.Convert(v.Type()))
