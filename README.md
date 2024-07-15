@@ -48,6 +48,22 @@ func GetMenus(w http.ResponseWriter, r *http.Request) {
 ```
 The multiple values are separated by comma `,` in the query string. For example, `/menus?categories=desserts,beverages`.
 
+### Parse from URL
+You can also parse query parameters from URL string by calling the `ParseURL` function. Here's an example:
+```go
+
+func main() {
+    var pagination Pagination
+    url := "http://example.com/path?page=1&limit=5"
+    err := qparser.ParseURL(url, &pagination)
+    if err != nil {
+        // Handle Error
+    }
+
+    // Do something with pagination
+}
+```
+
 ## Supported field types
 Currently, it only supports basic primitive types such as:
 - String
@@ -65,5 +81,4 @@ Currently, it only supports basic primitive types such as:
 - Custom multivalues separator
 
 ## Contribution
-CONTRIBUTION GUIDE SOON!\
-Contributions are welcome! If you have any improvements, bug fixes, or new features you'd like to add, please let me know.
+Contributions are welcome! If you have any improvements, bug fixes, or new features you'd like to add.
