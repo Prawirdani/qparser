@@ -33,19 +33,14 @@ var invalidReflect = reflect.Value{}
 // Multiple query parameter values separator
 const SEPARATOR = ","
 
-// SetValue sets the query parameter value to the reflected value from the struct field.
-func SetValue(v reflect.Value, queryValue string) error {
-	// Handle pointer field, by dereferencing it
-	if v.Kind() == reflect.Ptr {
-		if v.IsNil() {
-			v.Set(reflect.New(v.Type().Elem()))
-		}
-		v = v.Elem()
-	}
+// setValue sets the query parameter value to the reflected value from the struct field.
+func setValue(v reflect.Value, value string) error {
+	// BUG: We already deref the value in the parse function, so we should not deref it again here. But somehow it still reflecting as a pointer, so we need to deref it again.
+	v = deref(v)
 
 	if v.Kind() == reflect.Slice {
 		values := func() (result []string) {
-			for _, value := range strings.Split(queryValue, SEPARATOR) {
+			for _, value := range strings.Split(value, SEPARATOR) {
 				if value = strings.TrimSpace(value); value != "" {
 					result = append(result, value)
 				}
@@ -59,7 +54,7 @@ func SetValue(v reflect.Value, queryValue string) error {
 		for i, value := range values {
 			item := cpSlice.Index(i)
 
-			if err := SetValue(item, value); err != nil {
+			if err := setValue(item, value); err != nil {
 				return err
 			}
 		}
@@ -72,12 +67,12 @@ func SetValue(v reflect.Value, queryValue string) error {
 		return fmt.Errorf("unsupported kind %s", v.Kind())
 	}
 
-	value := set(queryValue)
-	if !value.IsValid() || value == invalidReflect {
-		return fmt.Errorf("invalid value '%s' for field", queryValue)
+	result := set(value)
+	if !result.IsValid() || result == invalidReflect {
+		return fmt.Errorf("invalid value '%s' for field", value)
 	}
 
-	v.Set(value.Convert(v.Type()))
+	v.Set(result.Convert(v.Type()))
 
 	return nil
 }
