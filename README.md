@@ -19,14 +19,14 @@ type Pagination struct {
 }
 
 func MyHandler(w http.ResponseWriter, r *http.Request) {
-	var pagination Pagination
-	
-	err := qparser.ParseRequest(r, &pagination)
-	if err != nil {
-		// Handle Error
-	}
+    var pagination Pagination
 
-	// Do something with pagination
+    err := qparser.ParseRequest(r, &pagination)
+    if err != nil {
+        // Handle Error
+    }
+        
+    // Do something with pagination
 }
 ```
 By default, it does not validate empty query values. To perform empty value validation or implement some business rules validation, you can create your own validator or use a validator package like [validator](https://github.com/go-playground/validator).
@@ -36,7 +36,7 @@ To allow multiple values for a single query parameter, you can use a slice type.
 ```go
 // Representing filter for menu
 type MenuFilter struct {
-	Categories []string `qp:"categories"`
+    Categories []string `qp:"categories"`
     Available  bool     `qp:"available"`
 }
 
@@ -51,10 +51,10 @@ type MenuQueryParams struct {
 }
 
 func GetMenus(w http.ResponseWriter, r *http.Request) {
-	var f MenuQueryParams
-	if err := qparser.ParseRequest(r, &f); err != nil {
+    var f MenuQueryParams
+    if err := qparser.ParseRequest(r, &f); err != nil {
         // Handle Error
-	}
+    }
     // Do something with f.Filter and f.Pagination
 }
 ```
@@ -66,7 +66,9 @@ You can also parse query parameters from URL string by calling the `ParseURL` fu
 
 func main() {
     var pagination Pagination
+
     url := "http://example.com/path?page=1&limit=5"
+
     err := qparser.ParseURL(url, &pagination)
     if err != nil {
         // Handle Error
