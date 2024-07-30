@@ -28,7 +28,7 @@ jobs:
       run: go mod verify
 
     - name: Run Test
-      script: |
+      run: |
         go get -d -v ./...
         go test -race -v ./...
 
@@ -37,7 +37,7 @@ jobs:
       uses: actions/create-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  
-        with:
+      with:
         tag_name: ${{ github.ref }}
         release_name: Release ${{ github.ref }}
         draft: false
