@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Retrieve Go version from go.mod
+      id: get-go-version
+      run: |
+        go_version=$(go mod edit -json | jq -r .Go)
+        echo "GO_VERSION=${go_version}" >> $GITHUB_ENV
+        echo "Go version is $go_version"
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Run Tests
+      run: |
+        go get -d -v ./...
+        go test -race -v ./...
+
