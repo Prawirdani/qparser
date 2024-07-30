@@ -1,7 +1,3 @@
-
-## ⚠️ Warning ⚠️
-This package is still under development and not ready for production use.\
-\
 `qparser` is a simple package that help parse query parameters into struct in Go. It is inspired by [gorilla/schema](https://github.com/gorilla/schema) with main focus on query parameters. Built on top of Go stdlib, it uses custom struct tag `qp` to define the query parameter key .
 
 ## Installation
@@ -79,7 +75,6 @@ func main() {
 ```
 
 ## Supported field types
-Currently, it only supports basic primitive types such as:
 - String
 - Boolean
 - Integers (int, int8, int16, int32 and int64)
@@ -94,7 +89,3 @@ Currently, it only supports basic primitive types such as:
 - Default value mechanism
 - Mapped Errors
 - Custom multivalues separator
-
-## Contribution
-Contributions are welcome! If you have any improvements, bug fixes, or new features you'd like to add.
-
