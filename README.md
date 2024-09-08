@@ -25,7 +25,6 @@ func MyHandler(w http.ResponseWriter, r *http.Request) {
     // Do something with pagination
 }
 ```
-By default, it does not validate empty query values. To perform empty value validation or implement some business rules validation, you can create your own validator or use a validator package like [validator](https://github.com/go-playground/validator).
 
 ### Multiple Values Query & Nested Struct
 To allow multiple values for a single query parameter, you can use a slice type.
@@ -74,6 +73,12 @@ func main() {
 }
 ```
 
+## Notes
+- Empty query values are not validated by default. For custom validation (including empty value checks), you can create your own validator or use a third party validator package like [go-playground/validator](https://github.com/go-playground/validator).
+- Missing query parameters:
+    - Regular fields keep their zero values (e.g., `0` for int, `""` for string, `false` for bool)
+    - Pointer and slice fields remain `nil`
+
 ## Supported field types
 - String
 - Boolean
@@ -85,7 +90,14 @@ func main() {
 - A pointer to one of above
 
 ## Future plans
-- Support for various types such as multidimensional slice and slice of Struct
-- Default value mechanism
-- Mapped Errors
-- Custom multivalues separator
+- Introduce benchmarking to assess and optimize performance.
+- Enhance overall performance and efficiency.
+- Expand support to include various types, such as multidimensional slices and slices of structs, complex types, and more.
+- Implement a default value mechanism for enhanced flexibility.
+- Provide mapped errors for clearer error handling.
+- Add support for custom multi-value separators.
+
+## Undiscovered Scenarios and Behavior
+- What happens if fields have the same query parameter tag?
+
+

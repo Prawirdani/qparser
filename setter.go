@@ -35,7 +35,6 @@ const SEPARATOR = ","
 
 // setValue sets the query parameter value to the reflected value from the struct field.
 func setValue(v reflect.Value, value string) error {
-	// BUG: We already deref the value in the parse function, so we should not deref it again here. But somehow it still reflecting as a pointer, so we need to deref it again.
 	v = deref(v)
 
 	if v.Kind() == reflect.Slice {
@@ -117,4 +116,15 @@ func setFloat(bitSize int) Setter {
 		}
 		return reflect.ValueOf(v)
 	}
+}
+
+// deref helps to dereference a pointer value.
+func deref(v reflect.Value) reflect.Value {
+	if v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			v.Set(reflect.New(v.Type().Elem()))
+		}
+		v = v.Elem()
+	}
+	return v
 }
