@@ -11,39 +11,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestParse(t *testing.T) {
+	testCases := []struct {
+		name        string
+		dst         any
+		expectError error
+	}{
+		{"ValidStructPointer", &struct{}{}, nil},
+		{"NilPointer", nil, ErrNotPtr},
+		{"NonPointer", struct{}{}, ErrNotPtr},
+		{"PointerToNonStruct", new(int), ErrNotPtr},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := parse(url.Values{}, tc.dst)
+			require.Equal(t, tc.expectError, err)
+		})
+	}
+}
+
 // While creating individual tests for each type may seem redundant or excessive,
 // But it's good to have them as they provide a more granular view of the parser's behavior.
 // These tests help ensure that the parser handles all expected input variations correctly,
 // providing confidence in its robustness and reliability.
-
-func TestReflecter(t *testing.T) {
-	t.Run("Success", func(t *testing.T) {
-		type s struct{}
-		_, err := reflecter(&s{})
-		require.Nil(t, err)
-	})
-
-	t.Run("NotPtr", func(t *testing.T) {
-		type s struct{}
-		_, err := reflecter(s{})
-		require.NotNil(t, err)
-		require.Equal(t, ErrNotPtr, err)
-	})
-
-	t.Run("NotStruct", func(t *testing.T) {
-		var s string
-		_, err := reflecter(s)
-		require.NotNil(t, err)
-		require.Equal(t, ErrNotPtr, err)
-	})
-
-	t.Run("PointerNonStruct", func(t *testing.T) {
-		var i int
-		_, err := reflecter(&i)
-		require.NotNil(t, err)
-		require.Equal(t, ErrNotPtr, err)
-	})
-}
 
 type (
 	strAlias string
@@ -608,28 +599,47 @@ func TestNestedStruct(t *testing.T) {
 	err = parse(values, &n)
 	assert.Nil(t, err)
 	assert.Equal(t, expected, n)
-}
 
-func TestEmptyNestedPointerStruct(t *testing.T) {
-	type child struct {
-		F1 *string `qp:"f1"`
-	}
-	type parent struct {
-		C *child
-	}
+	t.Run("Empty-Nested-Pointer", func(t *testing.T) {
+		type child struct {
+			F1 *string `qp:"f1"`
+		}
+		type parent struct {
+			C *child
+		}
 
-	queryParams := ""
-	var s parent
-	expected := parent{
-		C: nil,
-	}
+		queryParams := ""
+		var s parent
+		expected := parent{
+			C: nil,
+		}
 
-	values, err := url.ParseQuery(queryParams)
-	require.Nil(t, err)
+		values, err := url.ParseQuery(queryParams)
+		require.Nil(t, err)
 
-	err = parse(values, &s)
-	assert.Nil(t, err)
-	assert.Equal(t, expected, s)
+		err = parse(values, &s)
+		assert.Nil(t, err)
+		assert.Equal(t, expected, s)
+	})
+
+	t.Run("Invalid-Nested-Pointer", func(t *testing.T) {
+		type child struct {
+			F1 complex64 `qp:"f1"`
+		}
+
+		type parent struct {
+			C *child
+		}
+
+		queryParams := "f1=1+2i"
+		var s parent
+
+		values, err := url.ParseQuery(queryParams)
+		require.Nil(t, err)
+
+		err = parse(values, &s)
+		assert.NotNil(t, err)
+	})
 }
 
 type Pagination struct {
@@ -648,35 +658,33 @@ type SearchParams struct {
 }
 
 func TestParseRequest(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
-		queryParams := "page=1&limit=10&q=lorem&categories=foo,bar,baz"
-		url := "http://example.com?" + queryParams
+	queryParams := "page=1&limit=10&q=lorem&categories=foo,bar,baz"
+	url := "http://example.com?" + queryParams
 
-		req, err := http.NewRequest(http.MethodGet, url, nil)
-		require.Nil(t, err, fmt.Sprintf("Error creating request: %s", err))
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	require.Nil(t, err, fmt.Sprintf("Error creating request: %s", err))
 
-		rr := httptest.NewRecorder()
+	rr := httptest.NewRecorder()
 
-		handlerFn := func(w http.ResponseWriter, r *http.Request) {
-			var sp SearchParams
-			err := ParseRequest(r, &sp)
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			require.Nil(t, err)
-			assert.Equal(t, 1, sp.Pagination.Page)
-			assert.Equal(t, 10, sp.Pagination.Limit)
-			assert.Equal(t, "lorem", sp.Q)
-			assert.Equal(t, []string{"foo", "bar", "baz"}, sp.Filters.Categories)
-			w.WriteHeader(http.StatusOK)
+	handlerFn := func(w http.ResponseWriter, r *http.Request) {
+		var sp SearchParams
+		err := ParseRequest(r, &sp)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
 		}
+		require.Nil(t, err)
+		assert.Equal(t, 1, sp.Pagination.Page)
+		assert.Equal(t, 10, sp.Pagination.Limit)
+		assert.Equal(t, "lorem", sp.Q)
+		assert.Equal(t, []string{"foo", "bar", "baz"}, sp.Filters.Categories)
+		w.WriteHeader(http.StatusOK)
+	}
 
-		http.HandlerFunc(handlerFn).ServeHTTP(rr, req)
-		require.Equal(t, http.StatusOK, rr.Code)
-	})
+	http.HandlerFunc(handlerFn).ServeHTTP(rr, req)
+	require.Equal(t, http.StatusOK, rr.Code)
 
-	t.Run("invalid", func(t *testing.T) {
+	t.Run("Invalid", func(t *testing.T) {
 		queryParams := "page=1&limit=invalid-limit&q=lorem"
 		url := "http://example.com?" + queryParams
 		req, err := http.NewRequest(http.MethodGet, url, nil)
@@ -712,7 +720,7 @@ func TestParseURL(t *testing.T) {
 
 	assert.Equal(t, expected, sp)
 
-	t.Run("invalid-url", func(t *testing.T) {
+	t.Run("Invalid-URL", func(t *testing.T) {
 		url := "ht@tp://example.com?page=1&limit=10&q=lorem&categories=foo,bar,baz"
 		var sp SearchParams
 		err := ParseURL(url, &sp)
