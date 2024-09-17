@@ -1,3 +1,5 @@
+[![codecov](https://codecov.io/github/Prawirdani/qparser/graph/badge.svg?token=95BS8BNRIY)](https://codecov.io/github/Prawirdani/qparser)
+
 `qparser` is a simple package that help parse query parameters into struct in Go. It is inspired by [gorilla/schema](https://github.com/gorilla/schema) with main focus on query parameters. Built on top of Go stdlib, it uses custom struct tag `qp` to define the query parameter key .
 
 ## Installation
