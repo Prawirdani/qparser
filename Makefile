@@ -1,11 +1,11 @@
-COVERAGE_FILE := coverage.out
+COVERAGE_FILE := coverage.txt
 COVERAGE_HTML := coverage.html
 
 test:
 	go test -v -count=1 -race ./... -cover
 
 test\:coverage:
-	go test -v -count=1 -race ./... -coverprofile=coverage.out
+	go test -v -count=1 -race ./... -coverprofile=$(COVERAGE_FILE)
 
 
 coverage-html:
