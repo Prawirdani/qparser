@@ -27,7 +27,7 @@ func MyHandler(w http.ResponseWriter, r *http.Request) {
 ```
 
 ### Multiple Values Query & Nested Struct
-To allow multiple values for a single query parameter, you can use a slice type.
+To allow multiple values for a single query parameter, you can use a slice type. For **nested structs**, you can pass the query parameters using the qp tag within the nested struct fields. This allows you to build more complex query strings that include nested parameters.
 ```go
 // Representing filter for menu
 type MenuFilter struct {
@@ -53,7 +53,10 @@ func GetMenus(w http.ResponseWriter, r *http.Request) {
     // Do something with f.Filter and f.Pagination
 }
 ```
-The multiple values are separated by comma `,` in the query string. For example, `/menus?categories=desserts,beverages`. For the nested struct, simply just pass the `qp` tag definition in the nested struct field. So the final query string will look like `/menus?categories=desserts,beverages&available=true&page=1&limit=5`.
+Multiple values in the query string should be **separated by commas**. For example: `/menus?categories=desserts,beverages`.
+A complete query string based on the above example might look like this: `/menus?categories=desserts,beverages&available=true&page=1&limit=5`.
+
+Simply ensure that the qp tags are defined appropriately in your nested struct fields to map these parameters correctly.
 
 ### Parse from URL
 You can also parse query parameters from URL string by calling the `ParseURL` function. Here's an example:
@@ -74,7 +77,7 @@ func main() {
 ```
 
 ## Notes
-- Empty query values are not validated by default. For custom validation (including empty value checks), you can create your own validator or use a third party validator package like [go-playground/validator](https://github.com/go-playground/validator).
+- Empty query values are not validated by default. For custom validation (including empty value checks), you can create your own validator by creating a pointer/value receiver method on the struct or with help of a third party validator package like [go-playground/validator](https://github.com/go-playground/validator).
 - Missing query parameters:
     - Regular fields keep their zero values (e.g., `0` for int, `""` for string, `false` for bool)
     - Pointer and slice fields remain `nil`
