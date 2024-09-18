@@ -61,7 +61,6 @@ func parse(queryValues url.Values, dst any) error {
 			isStruct = fieldValue.Type().Elem().Kind() == reflect.Struct
 		}
 
-		// TODO: Maybe spawning goroutine for recursive calls is a good idea
 		if isStruct {
 			if !isPtr {
 				if err := parse(queryValues, fieldValue.Addr().Interface()); err != nil {
@@ -103,8 +102,8 @@ func parse(queryValues url.Values, dst any) error {
 		}
 
 		// Retrieve the query parameter value
-		queryValue := queryValues.Get(tag)
-		if queryValue == "" {
+		queryValue, exists := queryValues[tag]
+		if len(queryValue) == 0 || !exists {
 			continue
 		}
 

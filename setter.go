@@ -34,26 +34,38 @@ var invalidReflect = reflect.Value{}
 const SEPARATOR = ","
 
 // setValue sets the query parameter value to the reflected value from the struct field.
-func setValue(v reflect.Value, value string) error {
+func setValue(v reflect.Value, queryValue []string) error {
 	v = deref(v)
 
 	if v.Kind() == reflect.Slice {
 		values := func() (result []string) {
-			for _, value := range strings.Split(value, SEPARATOR) {
-				if value = strings.TrimSpace(value); value != "" {
+			for _, value := range queryValue {
+				value = strings.TrimSpace(value)
+				if value == "" {
+					continue
+				}
+
+				// If the value contains the separator, split it and process each part
+				if strings.Contains(value, SEPARATOR) {
+					for _, v := range strings.Split(value, SEPARATOR) {
+						if v = strings.TrimSpace(v); v != "" {
+							result = append(result, v)
+						}
+					}
+				} else {
 					result = append(result, value)
 				}
 			}
 			return result
 		}()
 
-		// Create a new slice with the same type and length as the values
+		// Create a new slice with the same type, length and cap as the values
 		cpSlice := reflect.MakeSlice(v.Type(), len(values), len(values))
 
 		for i, value := range values {
 			item := cpSlice.Index(i)
 
-			if err := setValue(item, value); err != nil {
+			if err := setValue(item, []string{value}); err != nil {
 				return err
 			}
 		}
@@ -66,9 +78,9 @@ func setValue(v reflect.Value, value string) error {
 		return fmt.Errorf("unsupported kind %s", v.Kind())
 	}
 
-	result := set(value)
+	result := set(queryValue[0])
 	if !result.IsValid() || result == invalidReflect {
-		return fmt.Errorf("invalid value '%s' for field", value)
+		return fmt.Errorf("invalid value '%s' for field", queryValue)
 	}
 
 	v.Set(result.Convert(v.Type()))

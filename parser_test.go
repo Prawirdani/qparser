@@ -511,6 +511,38 @@ func TestSlices(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, expected, s)
 
+	t.Run("Repeated-Keys", func(t *testing.T) {
+		queryParams := "f1=foo&f1=bar&f1=baz&f1=qux"
+		var s slices
+		expected := slices{
+			F1: []string{"foo", "bar", "baz", "qux"},
+		}
+
+		values, err := url.ParseQuery(queryParams)
+		require.Nil(t, err)
+
+		err = parse(values, &s)
+		assert.Nil(t, err)
+		assert.Nil(t, s.F2)
+		assert.Equal(t, expected, s)
+	})
+
+	// Mixed multiple values and single values comma-separated
+	t.Run("Mixed-Keys", func(t *testing.T) {
+		queryParams := "f1=foo,bar&f1=baz&f1=qux&f1="
+		var s slices
+		expected := slices{
+			F1: []string{"foo", "bar", "baz", "qux"},
+		}
+
+		values, err := url.ParseQuery(queryParams)
+		require.Nil(t, err)
+
+		err = parse(values, &s)
+		assert.Nil(t, err)
+		assert.Equal(t, expected, s)
+	})
+
 	t.Run("Invalid", func(t *testing.T) {
 		queryParams := "f4=1,2,invalid"
 		values, err := url.ParseQuery(queryParams)
