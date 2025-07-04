@@ -777,7 +777,7 @@ func TestParseRequest(t *testing.T) {
 		assert.Equal(t, 10, sp.Pagination.Limit)
 		assert.Equal(t, "lorem", sp.Q)
 		assert.Equal(t, []string{"foo", "bar", "baz"}, sp.Filters.Categories)
-		assert.Equal(t, currDate, sp.Date)
+		assert.True(t, currDate.Equal(sp.Date))
 		w.WriteHeader(http.StatusOK)
 	}
 
