@@ -100,12 +100,58 @@ func main() {
 - Floats (float64 and float32)
 - Slice of above types
 - Nested Struct
+- time.Time
 - A pointer to one of above
 
-## Future plans
-- Introduce benchmarking to assess and optimize performance.
-- Enhance overall performance and efficiency.
-- Expand support to include various types, such as multidimensional slices and slices of structs, complex types, and more.
-- Implement a default value mechanism for enhanced flexibility.
-- Provide mapped errors for clearer error handling.
-- Add support for custom multi-value separators.
+### Time Handling
+Supports time.Time, *time.Time, and type aliases. Handles a variety of standard time formats, both with and without timezone offsets, and supports nanosecond-level precision. Date formats follow the YYYY-MM-DD layout.
+<div align="center">
+
+| Format Description                         |Layout Example                        |
+| :------------------------------------------|:-------------------------------------|
+| Time only                                  |`15:04:05`                            |
+| Date only                                  |`2006-01-02`                          |
+| Date & time (space separated)              |`2006-01-02 15:04:05`                 |
+| Date & time + milliseconds                 |`2006-01-02T15:04:05.000`             |
+| Date & time + microseconds                 |`2006-01-02T15:04:05.000000`          |
+| Date & time + nanoseconds                  |`2006-01-02T15:04:05.999999999`       |
+| Date & time + TZ offset                    |`2006-01-02T15:04:05-07:00`           |
+| Date & time + milliseconds + TZ            |`2006-01-02T15:04:05.000-07:00`       |
+| Date & time + microseconds + TZ            |`2006-01-02T15:04:05.000000-07:00`    |
+| Date & time + nanoseconds + TZ             |`2006-01-02T15:04:05.999999999-07:00` |
+| RFC3339 (Z or offset)                      |`2006-01-02T15:04:05Z07:00`           |
+| RFC3339Nano (Z or offset, nanosecond prec) |`2006-01-02T15:04:05.999999999Z07:00` |
+| Space separator + TZ                       |`2006-01-02 15:04:05-07:00`           |
+| Space separator + fractional + TZ          |`2006-01-02 15:04:05.123456789 -07:00`|
+
+</div>
+
+- Fractional seconds (milliseconds, microseconds, nanoseconds) are supported with or without a timezone.
+- Timezones may use Z, +HH:MM, or -HH:MM.
+- No support for named timezones (e.g., PST, UTC)—only numeric offsets.
+
+Example:
+```go
+type ReportSearchQuery struct {
+    From time.Time `qp:"from"`
+    To time.Time `qp:"to"`
+}
+func main() {
+    var search ReportSearchQuery
+
+    url := "http://example.com/reports?from=2025-07-01&to=2025-07-31"
+
+    err := qparser.ParseURL(url, &search)
+    if err != nil {
+        // Handle Error
+    }
+    // Do something with search 
+}
+```
+
+## TODO 
+- [ ] Introduce benchmarking to evaluate and optimize performance
+- [ ] Add support for default values via struct tags for better flexibility
+- [ ] Explore parsing into interface fields without knowing the concrete type (may not be feasible due to reflection limits)
+- [ ] Provide structured, mapped errors for clearer debugging and validation feedback
+- [ ] Support custom multi-value separators to improve slice parsing flexibility

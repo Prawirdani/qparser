@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -55,6 +56,8 @@ type (
 
 	float32Alias float32
 	float64Alias float64
+
+	timeAlias time.Time
 )
 
 func TestStrings(t *testing.T) {
@@ -461,6 +464,65 @@ func TestFloats(t *testing.T) {
 	})
 }
 
+func TestTime(t *testing.T) {
+	type times struct {
+		F1 time.Time   `qp:"f1"`
+		F2 *time.Time  `qp:"f2"`
+		F3 timeAlias   `qp:"f3"`
+		F4 *timeAlias  `qp:"f4"`
+		F5 time.Time   `qp:"-"`
+		F6 []time.Time `qp:"f6"`
+	}
+
+	currDate := time.Now().Truncate(time.Nanosecond)
+
+	dateStr := currDate.Format(time.RFC3339Nano)
+	queryParams := fmt.Sprintf(
+		"f1=%s&f2=%s&f3=%s&f4=%s&f5=ignored&f6=%s,%s",
+		dateStr,
+		dateStr,
+		dateStr,
+		dateStr,
+		dateStr,
+		dateStr,
+	)
+	expected := times{
+		F1: currDate,
+		F2: ptr(currDate),
+		F3: timeAlias(currDate),
+		F4: ptr(timeAlias(currDate)),
+		F5: time.Time{},
+		F6: []time.Time{
+			currDate,
+			currDate,
+		},
+	}
+
+	values, err := url.ParseQuery(queryParams)
+	require.Nil(t, err)
+
+	var result times
+	err = parse(values, &result)
+
+	require.Nil(t, err)
+	require.Equal(t, expected.F1, result.F1)
+	require.Equal(t, expected.F2, result.F2)
+	require.Equal(t, expected.F3, result.F3)
+	require.Equal(t, expected.F4, result.F4)
+	require.Equal(t, expected.F5, result.F5)
+	require.Equal(t, expected.F6, result.F6)
+
+	t.Run("Invalid", func(t *testing.T) {
+		queryParams := "f1=invalid-date"
+		values, err := url.ParseQuery(queryParams)
+		require.Nil(t, err)
+
+		err = parse(values, &result)
+		require.NotNil(t, err)
+		require.Contains(t, err.Error(), "invalid value")
+	})
+}
+
 func TestSlices(t *testing.T) {
 	type slices struct {
 		F1  []string     `qp:"f1"`
@@ -686,11 +748,16 @@ type Filter struct {
 type SearchParams struct {
 	Pagination Pagination
 	Filters    Filter
-	Q          string `qp:"q"`
+	Q          string    `qp:"q"`
+	Date       time.Time `qp:"date"`
 }
 
 func TestParseRequest(t *testing.T) {
-	queryParams := "page=1&limit=10&q=lorem&categories=foo,bar,baz"
+	currDate := time.Now().Truncate(time.Nanosecond)
+
+	queryParams := "page=1&limit=10&q=lorem&categories=foo,bar,baz&date=" + currDate.Format(
+		time.RFC3339Nano,
+	)
 	url := "http://example.com?" + queryParams
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
@@ -710,6 +777,7 @@ func TestParseRequest(t *testing.T) {
 		assert.Equal(t, 10, sp.Pagination.Limit)
 		assert.Equal(t, "lorem", sp.Q)
 		assert.Equal(t, []string{"foo", "bar", "baz"}, sp.Filters.Categories)
+		assert.Equal(t, currDate, sp.Date)
 		w.WriteHeader(http.StatusOK)
 	}
 
