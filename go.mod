@@ -1,6 +1,6 @@
 module github.com/prawirdani/qparser
 
-go 1.20
+go 1.24.5
 
 require github.com/stretchr/testify v1.9.0
 
