@@ -149,9 +149,14 @@ func main() {
 }
 ```
 
-## TODO 
-- [ ] Introduce benchmarking to evaluate and optimize performance
-- [ ] Add support for default values via struct tags for better flexibility
-- [ ] Explore parsing into interface fields without knowing the concrete type (may not be feasible due to reflection limits)
-- [ ] Provide structured, mapped errors for clearer debugging and validation feedback
-- [ ] Support custom multi-value separators to improve slice parsing flexibility
+
+## Benchmarks
+```text
+goos: linux
+goarch: amd64
+cpu: Intel(R) Core(TM) i5-8259U CPU @ 2.30GHz
+Benchmark/Small-8              91339      13457 ns/op      4720 B/op      111 allocs/op
+Benchmark/Medium-8             69544      17252 ns/op      4784 B/op      113 allocs/op
+Benchmark/Large-8              63728      18126 ns/op      5240 B/op      128 allocs/op
+Benchmark/LargeWithDate-8      18294      67437 ns/op      36575 B/op     402 allocs/op
+```

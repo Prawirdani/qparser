@@ -1,6 +1,9 @@
 COVERAGE_FILE := coverage.txt
 COVERAGE_HTML := coverage.html
 
+benchmark:
+	go test -bench=. -benchmem
+
 test:
 	go test -v -count=1 -race ./... -cover
 
