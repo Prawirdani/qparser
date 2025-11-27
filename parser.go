@@ -1,232 +1,272 @@
 package qparser
 
 import (
-	"errors"
 	"fmt"
-	"net/http"
-	"net/url"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 )
 
-var ErrNotPtr = errors.New("not a pointer to a struct")
+// parseStruct traverses struct fields and maps query parameters to field values
+func parseStruct(query map[string][]string, rv reflect.Value, rt reflect.Type) error {
+	info := getStructCache(rt)
+	if info.hasUnexportedWithTag {
+		return ErrUnexportedStruct
+	}
 
-const structTAG = "qp"
+	for _, field := range info.fields {
+		if field.isNested {
+			if err := parseNestedField(query, rv, field, info.name); err != nil {
+				return err
+			}
+			continue
+		}
 
-// ParseRequest parses the URL query parameters from the HTTP request and sets the corresponding fields in the struct.
-// dst should be a pointer to a struct.
-func ParseRequest(r *http.Request, dst any) error {
-	queryValues := r.URL.Query()
-	return parse(queryValues, dst)
+		vals, ok := query[field.tag]
+		if !ok {
+			continue
+		}
+
+		fv := rv.FieldByIndex(field.index)
+		if err := setFieldValue(fv, field.typ, vals); err != nil {
+			return wrapFieldError(fmt.Sprintf("%s.%s", info.name, field.name), err)
+		}
+	}
+	return nil
 }
 
-// ParseURL parses query parameters from the URL string and sets the corresponding fields in the struct.
-// The URL string should be in the format "http://example.com?qpkey=value1&qpkey2=value2".
-// dst should be a pointer to a struct.
-func ParseURL(address string, dst any) error {
-	urlObj, err := url.Parse(address)
-	if err != nil {
-		return err
+// parseNestedField handles embedded or nested struct fields
+func parseNestedField(query map[string][]string, rv reflect.Value, field fieldInfo, parentName string) error {
+	fv := rv.FieldByIndex(field.index)
+	ft := field.typ
+
+	// Handle pointer to struct
+	if ft.Kind() == reflect.Ptr {
+		if fv.IsNil() {
+			fv.Set(reflect.New(ft.Elem()))
+		}
+		fv = fv.Elem()
+		ft = ft.Elem()
 	}
-	queryValues := urlObj.Query()
-	return parse(queryValues, dst)
+
+	if err := parseStruct(query, fv, ft); err != nil {
+		return wrapFieldError(fmt.Sprintf("%s.%s", parentName, field.name), err)
+	}
+	return nil
 }
 
-func parse(queryValues url.Values, dst any) error {
-	v, err := validateStructPointer(dst)
-	if err != nil {
-		return err
+// setFieldValue routes to the appropriate handler based on field type
+func setFieldValue(fv reflect.Value, ft reflect.Type, vals []string) error {
+	switch ft.Kind() {
+	case reflect.Ptr:
+		return setPtrField(fv, ft.Elem(), vals)
+	case reflect.Slice:
+		return setSliceField(fv, ft, vals)
+	default:
+		if len(vals) == 0 {
+			return nil
+		}
+		return setSingleValue(vals[0], fv, ft)
 	}
-	v = v.Elem()
-	t := v.Type()
+}
 
-	// Iterate over the struct fields
-	for i := 0; i < t.NumField(); i++ {
-		fieldMetadata := t.Field(i)
-		fieldValue := v.Field(i)
-
-		if err := parseField(queryValues, fieldMetadata, fieldValue); err != nil {
+// setPtrField handles pointer fields, including *[]T
+func setPtrField(fv reflect.Value, elemType reflect.Type, vals []string) error {
+	if elemType.Kind() == reflect.Slice {
+		parts := splitAndTrim(vals)
+		if len(parts) == 0 {
+			return nil
+		}
+		slice := reflect.MakeSlice(elemType, len(parts), len(parts))
+		if err := fillSlice(slice, elemType.Elem(), parts); err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-func validateStructPointer(st any) (reflect.Value, error) {
-	v := reflect.ValueOf(st)
-	if v.Kind() != reflect.Ptr || v.Elem().Kind() != reflect.Struct {
-		return v, ErrNotPtr
-	}
-	return v, nil
-}
-
-// parseField handles parsing a single field based on its type
-func parseField(
-	queryValues url.Values,
-	fieldMetadata reflect.StructField,
-	fieldValue reflect.Value,
-) error {
-	switch {
-	// NOTE: Always Check time type before struct type, because time.Time is also struct but we handle it differently
-	case isTimeType(fieldValue):
-		return parseTimeField(queryValues, fieldMetadata, fieldValue)
-	case isStructType(fieldValue):
-		return parseStructField(queryValues, fieldValue)
-	default:
-		return parsePrimitiveField(queryValues, fieldMetadata, fieldValue)
-	}
-}
-
-// isTimeType checks if the field is time.Time, *time.Time, or aliases of these
-func isTimeType(fieldValue reflect.Value) bool {
-	timeType := reflect.TypeOf(time.Time{})
-	fieldType := fieldValue.Type()
-
-	// Handle pointer types
-	if fieldType.Kind() == reflect.Ptr {
-		fieldType = fieldType.Elem()
-	}
-
-	// Check if the type is time.Time or an alias of time.Time
-	return fieldType == timeType ||
-		fieldType.ConvertibleTo(timeType)
-}
-
-// isStructType checks if the field is a struct or pointer to struct (excluding time.Time)
-func isStructType(fieldValue reflect.Value) bool {
-	if isTimeType(fieldValue) {
-		return false
-	}
-
-	return fieldValue.Kind() == reflect.Struct ||
-		(fieldValue.Kind() == reflect.Ptr && fieldValue.Type().Elem().Kind() == reflect.Struct)
-}
-
-// parseTimeField handles time.Time, *time.Time, and any time-alias fields
-func parseTimeField(
-	queryValues url.Values,
-	fieldMetadata reflect.StructField,
-	fieldValue reflect.Value,
-) error {
-	tag := getStructTag(fieldMetadata)
-	if tag == "" {
+		ptr := reflect.New(elemType)
+		ptr.Elem().Set(slice)
+		fv.Set(ptr)
 		return nil
 	}
 
-	queryValue, exists := queryValues[tag]
-	if !exists || len(queryValue) == 0 {
+	if len(vals) == 0 || vals[0] == "" {
 		return nil
 	}
 
-	// Get the actual type we're working with (dereference if pointer)
-	targetType := fieldValue.Type()
-	isPtr := targetType.Kind() == reflect.Ptr
-	if isPtr {
-		if fieldValue.IsNil() {
-			fieldValue.Set(reflect.New(targetType.Elem()))
-		}
-		targetType = targetType.Elem()
-	}
-
-	// Create a time.Time value to parse into
-	var timeVal time.Time
-	if err := setValue(reflect.ValueOf(&timeVal).Elem(), queryValue); err != nil {
-		return fmt.Errorf("%s %s(%s)", err.Error(), fieldMetadata.Name, fieldMetadata.Type)
-	}
-
-	// Convert to the target type (handles both time.Time and aliases)
-	var finalVal reflect.Value
-	if targetType == reflect.TypeOf(time.Time{}) {
-		finalVal = reflect.ValueOf(timeVal)
-	} else {
-		finalVal = reflect.ValueOf(timeVal).Convert(targetType)
-	}
-
-	// Set the value (handling pointer case)
-	if isPtr {
-		fieldValue.Elem().Set(finalVal)
-
-		// Clean up if we got a zero time
-		if timeVal.IsZero() {
-			fieldValue.Set(reflect.Zero(fieldValue.Type()))
-		}
-	} else {
-		fieldValue.Set(finalVal)
-	}
-
-	return nil
-}
-
-// parseStructField handles struct and pointer to struct fields
-func parseStructField(queryValues url.Values, fieldValue reflect.Value) error {
-	var target reflect.Value
-	var shouldCleanupNilPointer bool
-
-	if fieldValue.Kind() == reflect.Ptr {
-		if fieldValue.IsNil() {
-			fieldValue.Set(reflect.New(fieldValue.Type().Elem()))
-			shouldCleanupNilPointer = true
-		}
-		target = fieldValue
-	} else {
-		target = fieldValue.Addr()
-	}
-
-	if err := parse(queryValues, target.Interface()); err != nil {
+	elemVal := reflect.New(elemType)
+	if err := setSingleValue(vals[0], elemVal.Elem(), elemType); err != nil {
 		return err
 	}
+	fv.Set(elemVal)
+	return nil
+}
 
-	// Clean up nil pointer if all fields are zero
-	if shouldCleanupNilPointer && isAllFieldsZero(fieldValue.Elem()) {
-		fieldValue.Set(reflect.Zero(fieldValue.Type()))
+// setSliceField handles slice fields
+func setSliceField(fv reflect.Value, ft reflect.Type, vals []string) error {
+	parts := splitAndTrim(vals)
+	if len(parts) == 0 {
+		return nil
+	}
+
+	slice := reflect.MakeSlice(ft, len(parts), len(parts))
+	if err := fillSlice(slice, ft.Elem(), parts); err != nil {
+		return err
+	}
+	fv.Set(slice)
+	return nil
+}
+
+// setSingleValue parses a single value and sets it on the reflect.Value
+func setSingleValue(val string, fv reflect.Value, typ reflect.Type) error {
+	// No look up table, just raw dog switch for maximum perf
+	// WARN: mega switch for raw performance. Maintain with care.
+	switch typ.Kind() {
+	// ----- Pointers -----
+	case reflect.Ptr:
+		elemType := typ.Elem()
+		elemVal := reflect.New(elemType)
+		if err := setSingleValue(val, elemVal.Elem(), elemType); err != nil {
+			return err
+		}
+		fv.Set(elemVal)
+
+	// ----- Special structs -----
+	case reflect.Struct:
+		if typ == reflect.TypeOf(time.Time{}) {
+			t, err := parseTime(val)
+			if err != nil {
+				return err
+			}
+			fv.Set(reflect.ValueOf(t))
+			return nil
+		}
+		return fmt.Errorf("%w: %v", ErrUnsupportedKind, typ.Kind())
+
+	// ----- Strings -----
+	case reflect.String:
+		fv.SetString(val)
+
+	// ----- Booleans -----
+	case reflect.Bool:
+		b, err := strconv.ParseBool(val)
+		if err != nil {
+			return ErrInvalidValue
+		}
+		fv.SetBool(b)
+
+	// ----- Signed integers -----
+	case reflect.Int:
+		n, err := strconv.ParseInt(val, 10, strconv.IntSize)
+		if err != nil {
+			return strconvNumError(err, val)
+		}
+		fv.SetInt(n)
+
+	case reflect.Int8:
+		n, err := strconv.ParseInt(val, 10, 8)
+		if err != nil {
+			return strconvNumError(err, val)
+		}
+		fv.SetInt(n)
+
+	case reflect.Int16:
+		n, err := strconv.ParseInt(val, 10, 16)
+		if err != nil {
+			return strconvNumError(err, val)
+		}
+		fv.SetInt(n)
+
+	case reflect.Int32:
+		n, err := strconv.ParseInt(val, 10, 32)
+		if err != nil {
+			return strconvNumError(err, val)
+		}
+		fv.SetInt(n)
+
+	case reflect.Int64:
+		n, err := strconv.ParseInt(val, 10, 64)
+		if err != nil {
+			return strconvNumError(err, val)
+		}
+		fv.SetInt(n)
+
+	// ----- Unsigned integers -----
+	case reflect.Uint:
+		n, err := strconv.ParseUint(val, 10, strconv.IntSize)
+		if err != nil {
+			return strconvNumError(err, val)
+		}
+		fv.SetUint(n)
+
+	case reflect.Uint8:
+		n, err := strconv.ParseUint(val, 10, 8)
+		if err != nil {
+			return strconvNumError(err, val)
+		}
+		fv.SetUint(n)
+
+	case reflect.Uint16:
+		n, err := strconv.ParseUint(val, 10, 16)
+		if err != nil {
+			return strconvNumError(err, val)
+		}
+		fv.SetUint(n)
+
+	case reflect.Uint32:
+		n, err := strconv.ParseUint(val, 10, 32)
+		if err != nil {
+			return strconvNumError(err, val)
+		}
+		fv.SetUint(n)
+
+	case reflect.Uint64:
+		n, err := strconv.ParseUint(val, 10, 64)
+		if err != nil {
+			return strconvNumError(err, val)
+		}
+		fv.SetUint(n)
+
+	// ----- Floats -----
+	case reflect.Float32:
+		f, err := strconv.ParseFloat(val, 32)
+		if err != nil {
+			return strconvNumError(err, val)
+		}
+		fv.SetFloat(f)
+
+	case reflect.Float64:
+		f, err := strconv.ParseFloat(val, 64)
+		if err != nil {
+			return strconvNumError(err, val)
+		}
+		fv.SetFloat(f)
+
+	default:
+		return fmt.Errorf("%w: %v", ErrUnsupportedKind, typ.Kind())
 	}
 
 	return nil
 }
 
-// parsePrimitiveField handles primitive types and other non-struct fields
-func parsePrimitiveField(
-	queryValues url.Values,
-	fieldMetadata reflect.StructField,
-	fieldValue reflect.Value,
-) error {
-	tag := getStructTag(fieldMetadata)
-	if tag == "" {
-		return nil
-	}
-
-	queryValue, exists := queryValues[tag]
-	if !exists || len(queryValue) == 0 {
-		return nil
-	}
-
-	if !fieldValue.CanSet() {
-		return fmt.Errorf("cannot set field %s, be sure it is exported", fieldMetadata.Name)
-	}
-
-	if err := setValue(fieldValue, queryValue); err != nil {
-		return fmt.Errorf("%s %s(%s)", err.Error(), fieldMetadata.Name, fieldMetadata.Type)
-	}
-
-	return nil
-}
-
-// getStructTag extracts and validates the struct tag
-func getStructTag(fieldMetadata reflect.StructField) string {
-	tag := strings.TrimSpace(fieldMetadata.Tag.Get(structTAG))
-	if tag == "" || tag == "-" {
-		return ""
-	}
-	return tag
-}
-
-// isAllFieldsZero checks if all fields in a struct are zero values
-func isAllFieldsZero(structValue reflect.Value) bool {
-	for i := 0; i < structValue.NumField(); i++ {
-		if !structValue.Field(i).IsZero() {
-			return false
+// fillSlice populates a slice with parsed values
+func fillSlice(slice reflect.Value, elemType reflect.Type, parts []string) error {
+	for i, part := range parts {
+		if err := setSingleValue(part, slice.Index(i), elemType); err != nil {
+			return fmt.Errorf("element [%d]: %w", i, err)
 		}
 	}
-	return true
+	return nil
+}
+
+// splitAndTrim splits comma-separated values and trims whitespace
+func splitAndTrim(vals []string) []string {
+	var parts []string
+	for _, v := range vals {
+		for p := range strings.SplitSeq(v, ",") {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				parts = append(parts, p)
+			}
+		}
+	}
+	return parts
 }

@@ -5,10 +5,10 @@ benchmark:
 	go test -bench=. -benchmem
 
 test:
-	go test -v -count=1 -race ./... -cover
+	go test -v -count=1 -race . -cover
 
 test\:coverage:
-	go test -v -count=1 -race ./... -coverprofile=$(COVERAGE_FILE)
+	go test -v -count=1 -race . -coverprofile=$(COVERAGE_FILE)
 
 
 coverage-html:

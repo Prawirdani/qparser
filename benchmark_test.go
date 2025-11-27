@@ -44,7 +44,7 @@ func Benchmark(b *testing.B) {
 			},
 			fn: func(v url.Values) error {
 				var f SmallFilter
-				return parse(v, &f)
+				return Parse(v, &f)
 			},
 		},
 		{
@@ -59,7 +59,7 @@ func Benchmark(b *testing.B) {
 			},
 			fn: func(v url.Values) error {
 				var f MediumFilter
-				return parse(v, &f)
+				return Parse(v, &f)
 			},
 		},
 		{
@@ -77,7 +77,7 @@ func Benchmark(b *testing.B) {
 			},
 			fn: func(v url.Values) error {
 				var f LargeFilter
-				return parse(v, &f)
+				return Parse(v, &f)
 			},
 		},
 		{
@@ -97,7 +97,7 @@ func Benchmark(b *testing.B) {
 			},
 			fn: func(v url.Values) error {
 				var f LargeFilter
-				return parse(v, &f)
+				return Parse(v, &f)
 			},
 		},
 	}
