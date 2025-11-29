@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -74,13 +73,12 @@ func setFieldValue(fv reflect.Value, ft reflect.Type, vals []string) error {
 // setPtrField handles pointer fields, including *[]T
 func setPtrField(fv reflect.Value, elemType reflect.Type, vals []string) error {
 	if elemType.Kind() == reflect.Slice {
-		parts := splitAndTrim(vals)
-		if len(parts) == 0 {
-			return nil
-		}
-		slice := reflect.MakeSlice(elemType, len(parts), len(parts))
-		if err := fillSlice(slice, elemType.Elem(), parts); err != nil {
+		slice, err := parseSliceFromStrings(vals, elemType)
+		if err != nil {
 			return err
+		}
+		if slice.Len() == 0 {
+			return nil
 		}
 		ptr := reflect.New(elemType)
 		ptr.Elem().Set(slice)
@@ -102,14 +100,13 @@ func setPtrField(fv reflect.Value, elemType reflect.Type, vals []string) error {
 
 // setSliceField handles slice fields
 func setSliceField(fv reflect.Value, ft reflect.Type, vals []string) error {
-	parts := splitAndTrim(vals)
-	if len(parts) == 0 {
-		return nil
-	}
-
-	slice := reflect.MakeSlice(ft, len(parts), len(parts))
-	if err := fillSlice(slice, ft.Elem(), parts); err != nil {
+	// Parse directly from comma-separated values without splitting
+	slice, err := parseSliceFromStrings(vals, ft)
+	if err != nil {
 		return err
+	}
+	if slice.Len() == 0 {
+		return nil
 	}
 	fv.Set(slice)
 	return nil
@@ -247,26 +244,83 @@ func setSingleValue(val string, fv reflect.Value, typ reflect.Type) error {
 	return nil
 }
 
-// fillSlice populates a slice with parsed values
-func fillSlice(slice reflect.Value, elemType reflect.Type, parts []string) error {
-	for i, part := range parts {
-		if err := setSingleValue(part, slice.Index(i), elemType); err != nil {
-			return fmt.Errorf("element [%d]: %w", i, err)
-		}
+// parseSliceFromStrings parses comma-separated values directly into a slice without intermediate allocations
+func parseSliceFromStrings(vals []string, sliceType reflect.Type) (reflect.Value, error) {
+	if len(vals) == 0 {
+		return reflect.Zero(sliceType), nil
 	}
-	return nil
-}
 
-// splitAndTrim splits comma-separated values and trims whitespace
-func splitAndTrim(vals []string) []string {
-	var parts []string
+	// Count total elements needed for pre-allocation
+	totalElements := 0
 	for _, v := range vals {
-		for p := range strings.SplitSeq(v, ",") {
-			p = strings.TrimSpace(p)
-			if p != "" {
-				parts = append(parts, p)
+		if v == "" {
+			continue
+		}
+		// Count commas + 1 for number of elements
+		for i := 0; i < len(v); i++ {
+			if v[i] == ',' {
+				totalElements++
+			}
+		}
+		totalElements++ // +1 for the string itself
+	}
+
+	if totalElements == 0 {
+		return reflect.Zero(sliceType), nil
+	}
+
+	slice := reflect.MakeSlice(sliceType, totalElements, totalElements)
+	elemType := sliceType.Elem()
+	elemIndex := 0
+
+	// Parse directly without creating intermediate strings
+	for _, v := range vals {
+		vLen := len(v)
+		if vLen == 0 {
+			continue
+		}
+
+		start := 0
+		for i := 0; i <= vLen; i++ {
+			if i == vLen || v[i] == ',' {
+				// Trim whitespace using indices directly
+				trimStart := start
+				trimEnd := i
+
+				// Trim leading whitespace - optimized with single comparison
+				for trimStart < trimEnd {
+					c := v[trimStart]
+					if c > ' ' && c != '\t' && c != '\n' && c != '\r' {
+						break
+					}
+					trimStart++
+				}
+
+				// Trim trailing whitespace - optimized
+				for trimStart < trimEnd {
+					c := v[trimEnd-1]
+					if c > ' ' && c != '\t' && c != '\n' && c != '\r' {
+						break
+					}
+					trimEnd--
+				}
+
+				// Only process non-empty trimmed parts
+				if trimStart < trimEnd {
+					if err := setSingleValue(v[trimStart:trimEnd], slice.Index(elemIndex), elemType); err != nil {
+						return reflect.Zero(sliceType), fmt.Errorf("element [%d]: %w", elemIndex, err)
+					}
+					elemIndex++
+				}
+				start = i + 1
 			}
 		}
 	}
-	return parts
+
+	// Resize slice if we skipped empty elements
+	if elemIndex < totalElements {
+		slice = slice.Slice(0, elemIndex)
+	}
+
+	return slice, nil
 }

@@ -3,7 +3,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/prawirdani/qparser)](https://goreportcard.com/report/github.com/prawirdani/qparser)
 ![Build Status](https://github.com/prawirdani/qparser/actions/workflows/ci.yml/badge.svg)
 
-`qparser` is a simple package that helps parse query parameters into structs in Go. It is inspired by [gorilla/schema](https://github.com/gorilla/schema) with a main focus on query parameters. Built on top of Go stdlib, it uses a custom struct tag `qp` to define the query parameter key.
+`qparser` is a lightweight Go package designed to parse URL query parameters directly into Go structs. It is built on the Go standard library, offering a simple and focused solution for handling incoming query strings.
 
 ## Table of Contents
 - [Installation](#installation)
@@ -79,6 +79,7 @@ func main() {
     // Do something with pagination
 }
 ```
+
 ### Multiple Values Query & Nested Struct
 To support multiple values for a single query parameter, use a slice type. For nested structs, utilize the qp tag within the fields of the nested struct to pass the query parameters. It's important to note that the parent struct containing the nested/child struct **should not have its own qp tag**. Here's an example:
 ```go
@@ -107,9 +108,14 @@ func GetMenus(w http.ResponseWriter, r *http.Request) {
 }
 ```
 There are three ways for the parser to handle multiple values query parameters:
-1. Comma-separated values: `/menus?categories=desserts,beverages,sides`
-2. Repeated Keys: `/menus?categories=desserts&categories=beverages&categories=sides`
-3. Combination of both: `/menus?categories=desserts,beverages&categories=sides`
+<div align="center">
+
+| Pattern               | URL                                                                    |
+| :---------------------|:-----------------------------------------------------------------------|
+| Comma-separated       | /menus?`categories`=desserts,beverages,sides                           |
+| Repeated Keys         | /menus?`categories`=desserts&`categories`=beverages&`categories`=sides |
+| Combination of both   | /menus?`categories`=desserts,beverages&`categories`=sides              |
+</div>
 
 Simply ensure that the qp tags are defined appropriately in your struct fields to map these parameters correctly.
 
@@ -119,6 +125,8 @@ Supports time.Time, *time.Time, and type aliases. Handles a variety of standard 
 
 | Format Description                         |Layout Example                        |
 | :------------------------------------------|:-------------------------------------|
+| RFC3339 (Z or offset)                      |`2006-01-02T15:04:05Z07:00`           |
+| RFC3339Nano (Z or offset, nanosecond prec) |`2006-01-02T15:04:05.999999999Z07:00` |
 | Time only                                  |`15:04:05`                            |
 | Date only                                  |`2006-01-02`                          |
 | Date & time (space separated)              |`2006-01-02 15:04:05`                 |
@@ -129,11 +137,9 @@ Supports time.Time, *time.Time, and type aliases. Handles a variety of standard 
 | Date & time + milliseconds + TZ            |`2006-01-02T15:04:05.000-07:00`       |
 | Date & time + microseconds + TZ            |`2006-01-02T15:04:05.000000-07:00`    |
 | Date & time + nanoseconds + TZ             |`2006-01-02T15:04:05.999999999-07:00` |
-| RFC3339 (Z or offset)                      |`2006-01-02T15:04:05Z07:00`           |
-| RFC3339Nano (Z or offset, nanosecond prec) |`2006-01-02T15:04:05.999999999Z07:00` |
 | Space separator + TZ                       |`2006-01-02 15:04:05-07:00`           |
 | Space separator + TZ (+ offset)            |`2006-01-02 15:04:05+07:00`           |
-| Space separator + fractional + TZ          |`2006-01-02 15:04:05.123456789-07:00`|
+| Space separator + fractional + TZ          |`2006-01-02 15:04:05.123456789-07:00` |
 
 </div>
 
@@ -145,8 +151,9 @@ Example:
 ```go
 type ReportFilter struct {
     From time.Time `qp:"from"`
-    To time.Time `qp:"to"`
+    To   time.Time `qp:"to"`
 }
+
 func main() {
     var filter ReportFilter 
 
@@ -245,23 +252,62 @@ This allows you to:
 
 
 ## Notes
-- Empty query values are not validated by default. For custom validation (including empty value checks), implement your own validation method on the struct or use a third-party validator such as [go-playground/validator](https://github.com/go-playground/validator).
+
+- Empty query values are not validated by default. For custom validation (including empty value checks), implement your own validation method on the struct or use a third-party validator such as go-playground/validator.
 - Missing query parameters:
-    - Primitive fields keep their zero values (0, "", false, etc.).
-    - Pointer fields are always initialized, even when the parameter is missing. They will contain the zero value of the underlying type.
-    - Slice fields become an empty slice ([]T{}), not nil.
-    - Pointer nested structs are also always initialized. Missing fields inside them receive their zero values.
+  - Primitive fields keep their zero values (0, "", false, etc.).
+  - Pointer-to-primitive fields (e.g., `*string`, `*int`) remain `nil` when the parameter is missing. They are only allocated when the parameter is provided.
+  - Slice fields (`[]T`) remain `nil` when the parameter is missing. They are allocated only when at least one value is successfully decoded.
+  - Pointer-to-slice fields (`*[]T`) remain `nil` when the parameter is missing. They are allocated only when the parameter is provided.
+  - Pointer-to-struct fields are **always initialized**, even when the nested parameters are missing. They contain the zero value of the struct.
 - For repeated query parameters, the value is appended to the slice every time. If you want deduplication or sanitization, implement a post-processing method on your struct.
-- The qp tag is case-sensitive and must match the query parameter key exactly.
+- The `qp` tag is case-sensitive and must match the query parameter key exactly.
+- Pointer-to-struct fields offer no practical benefit because they are always initialized and never `nil`, you cannot rely on `nil` checks to detect whether a nested parameter group was supplied. If you need that behavior, inspect field values or apply custom post-processing.
+
 
 
 ## Benchmarks
+
 ```text
 goos: linux
 goarch: amd64
 cpu: Intel(R) Core(TM) i5-8259U CPU @ 2.30GHz
-Benchmark/Small-8              224376     4602 ns/op       2680 B/op      13 allocs/op
-Benchmark/Medium-8             246818     4851 ns/op       2720 B/op      13 allocs/op
-Benchmark/Large-8              173422     5867 ns/op       3056 B/op      21 allocs/op
-Benchmark/LargeWithDate-8      160401     6543 ns/op       3104 B/op      23 allocs/op
+=== Sequential ===========================================================================================
+Benchmark/Seq/Minimal-8                  1204855          983.8 ns/op          224 B/op        1 allocs/op
+Benchmark/Seq/1-date-8                    930016           1233 ns/op          248 B/op        2 allocs/op
+Benchmark/Seq/2-dates-8                   626414           1599 ns/op          272 B/op        3 allocs/op
+Benchmark/Seq/slices-string-1*50-8        348960           2924 ns/op         1144 B/op        3 allocs/op
+Benchmark/Seq/slices-int-1*50-8           292065           3613 ns/op          664 B/op        3 allocs/op
+Benchmark/Seq/slices-2*50-8               202550           5514 ns/op         1584 B/op        5 allocs/op
+Benchmark/Seq/slices-2*100-8              123055           9351 ns/op         2960 B/op        5 allocs/op
+Benchmark/Seq/2*25-slices-and-2-dates-8   257817           4158 ns/op          944 B/op        7 allocs/op
+=== Parallel =============================================================================================
+Benchmark/Par/Minimal-8                  4529499          261.3 ns/op          224 B/op        1 allocs/op
+Benchmark/Par/1-date-8                   3590239          356.3 ns/op          248 B/op        2 allocs/op
+Benchmark/Par/2-dates-8                  2865769          420.1 ns/op          272 B/op        3 allocs/op
+Benchmark/Par/slices-string-1*50-8       1261774          963.2 ns/op         1144 B/op        3 allocs/op
+Benchmark/Par/slices-int-1*50-8          1136395           1025 ns/op          664 B/op        3 allocs/op
+Benchmark/Par/slices-2*50-8               684651           1758 ns/op         1584 B/op        5 allocs/op
+Benchmark/Par/slices-2*100-8              410012           2982 ns/op         2960 B/op        5 allocs/op
+Benchmark/Par/2*25-slices-and-2-dates-8   990036           1244 ns/op          944 B/op        7 allocs/op
 ```
+### Noticeable Behaviors
+
+#### Allocation Behavior
+- **Base cost**: 1 allocation for parsing infrastructure
+- **Dates**: Each successful parse creates exactly 1 allocation
+- **Slices**: Each slice parsing creates exactly 2 allocations
+
+#### Scaling Behavior
+- **Linear growth**: Time and memory scale proportionally with item count
+- **Predictable**: 2× items = ~2× time, exactly 2× memory
+- **Consistent**: Same allocation count regardless of data size
+
+#### Cache Behavior
+- **First use**: Reflection builds struct metadata cache
+- **Subsequent uses**: Zero-allocation cache lookups
+- **Thread-safe**: sync.Map enables concurrent access
+- **Persistent**: Cache lives for application lifetime
+
+#### Concurrency
+Parallel execution leverages sync.Map for effective caching, significantly improving performance under concurrent workloads like HTTP handlers by reducing per-operation time

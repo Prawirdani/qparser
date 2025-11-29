@@ -1,1 +1,5 @@
 coverage.*
+*.prof
+*.test
+*.bak
+personal-note.md

@@ -6,10 +6,7 @@ import (
 	"time"
 )
 
-var (
-	structCache = make(map[reflect.Type]*structInfo)
-	cacheMutex  sync.RWMutex
-)
+var structCache sync.Map
 
 type structInfo struct {
 	name                 string
@@ -26,30 +23,24 @@ type fieldInfo struct {
 }
 
 func getStructCache(rt reflect.Type) *structInfo {
-	cacheMutex.RLock()
-	if info, ok := structCache[rt]; ok {
-		cacheMutex.RUnlock()
-		return info
+	// Try to load from cache
+	if cached, ok := structCache.Load(rt); ok {
+		return cached.(*structInfo)
 	}
-	cacheMutex.RUnlock()
 
-	cacheMutex.Lock()
-	defer cacheMutex.Unlock()
-
-	if info, ok := structCache[rt]; ok {
-		return info
-	}
+	// Build struct info
 	info := &structInfo{name: rt.Name()}
-
 	for i := 0; i < rt.NumField(); i++ {
 		field := rt.Field(i)
 		tag := field.Tag.Get("qp")
+
 		if !field.IsExported() {
 			if tag != "" {
 				info.hasUnexportedWithTag = true
 			}
 			continue
 		}
+
 		if tag != "" {
 			info.fields = append(info.fields, fieldInfo{
 				name:     field.Name,
@@ -64,7 +55,6 @@ func getStructCache(rt reflect.Type) *structInfo {
 			if fieldType.Kind() == reflect.Ptr {
 				fieldType = fieldType.Elem()
 			}
-
 			if fieldType.Kind() == reflect.Struct && fieldType != reflect.TypeOf(time.Time{}) {
 				info.fields = append(info.fields, fieldInfo{
 					name:     field.Name,
@@ -75,8 +65,10 @@ func getStructCache(rt reflect.Type) *structInfo {
 				})
 			}
 		}
-
 	}
-	structCache[rt] = info
-	return info
+
+	// LoadOrStore handles race conditions atomically
+	// If another goroutine stored a value first, we return that instead
+	actual, _ := structCache.LoadOrStore(rt, info)
+	return actual.(*structInfo)
 }

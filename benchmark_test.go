@@ -1,131 +1,173 @@
 package qparser
 
 import (
+	"maps"
 	"net/url"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 )
 
-type SmallFilter struct {
-	IDs []int `qp:"ids"`
+type QFilter struct {
+	Page       int       `qp:"page"`
+	Limit      int       `qp:"limit"`
+	SortBy     string    `qp:"sort_by"`
+	Order      string    `qp:"order"`
+	Q          string    `qp:"q"`
+	Active     bool      `qp:"active"`
+	Threshold  float32   `qp:"threshold"`
+	Foo        string    `qp:"foo"`
+	Bar        string    `qp:"bar"`
+	Buz        string    `qp:"buz"`
+	From       time.Time `qp:"from"`
+	Until      time.Time `qp:"until"`
+	IDs        []int     `qp:"ids"`
+	Categories []string  `qp:"categories"`
 }
 
-type MediumFilter struct {
-	IDs    []int  `qp:"ids"`
-	Size   int    `qp:"size"`
-	Name   string `qp:"name"`
-	Active bool   `qp:"active"`
+var base = url.Values{
+	"page":      {"1"},
+	"limit":     {"10"},
+	"sort_by":   {"created_at"},
+	"order":     {"ASC"},
+	"q":         {"lorem ipsum dolor"},
+	"active":    {"true"},
+	"threshold": {"6.66"},
+	"foo":       {"bar"},
+	"bar":       {"buz"},
+	"buz":       {"quux"},
 }
 
-type LargeFilter struct {
-	IDs       []int     `qp:"ids"`
-	Size      int       `qp:"size"`
-	Name      string    `qp:"name"`
-	Active    bool      `qp:"active"`
-	Category  string    `qp:"category"`
-	Tags      []string  `qp:"tags"`
-	Threshold float64   `qp:"threshold"`
-	Start     time.Time `qp:"start"`
-	End       time.Time `qp:"end"`
+var tests = []struct {
+	name   string
+	values func() url.Values
+}{
+	{
+		// no Date, no slices
+		name:   "Minimal",
+		values: func() url.Values { return maps.Clone(base) },
+	},
+	{
+		name: "1-date",
+		values: func() url.Values {
+			now := time.Now()
+			from := now.Format(time.RFC3339)
+
+			v := maps.Clone(base)
+			v["from"] = []string{from}
+			return v
+		},
+	},
+	{
+		name: "2-dates",
+		values: func() url.Values {
+			now := time.Now()
+			from := now.Format(time.RFC3339)
+			until := now.Add(7 * 24 * time.Hour).Format(time.RFC3339)
+
+			v := maps.Clone(base)
+			v["from"] = []string{from}
+			v["until"] = []string{until}
+			return v
+		},
+	},
+	{
+		name: "slices-string-1*50",
+		values: func() url.Values {
+			v := maps.Clone(base)
+			v["categories"] = makeCategorySlice(50)["categories"]
+			return v
+		},
+	},
+	{
+		name: "slices-int-1*50",
+		values: func() url.Values {
+			v := maps.Clone(base)
+			v["ids"] = makeIDSlice(50)["ids"]
+			return v
+		},
+	},
+	{
+		name: "slices-2*50",
+		values: func() url.Values {
+			v := maps.Clone(base)
+			v["ids"] = makeIDSlice(50)["ids"]
+			v["categories"] = makeCategorySlice(50)["categories"]
+			return v
+		},
+	},
+	{
+		name: "slices-2*100",
+		values: func() url.Values {
+			v := maps.Clone(base)
+			v["ids"] = makeIDSlice(100)["ids"]
+			v["categories"] = makeCategorySlice(100)["categories"]
+			return v
+		},
+	},
+	{
+		name: "2*25-slices-and-2-dates",
+		values: func() url.Values {
+			now := time.Now()
+			from := now.Format(time.RFC3339)
+			until := now.Add(7 * 24 * time.Hour).Format(time.RFC3339)
+
+			v := maps.Clone(base)
+			v["from"] = []string{from}
+			v["until"] = []string{until}
+			v["ids"] = makeIDSlice(25)["ids"]
+			v["categories"] = makeCategorySlice(25)["categories"]
+			return v
+		},
+	},
 }
 
 func Benchmark(b *testing.B) {
-	tests := []struct {
-		name    string
-		makeVal func() url.Values
-		fn      func(url.Values) error
-	}{
-		{
-			name: "Small",
-			makeVal: func() url.Values {
-				return makeValues(50, nil)
-			},
-			fn: func(v url.Values) error {
-				var f SmallFilter
-				return Parse(v, &f)
-			},
-		},
-		{
-			name: "Medium",
-			makeVal: func() url.Values {
-				fields := map[string]string{
-					"size":   "42",
-					"name":   "test",
-					"active": "true",
-				}
-				return makeValues(50, fields)
-			},
-			fn: func(v url.Values) error {
-				var f MediumFilter
-				return Parse(v, &f)
-			},
-		},
-		{
-			name: "Large",
-			makeVal: func() url.Values {
-				fields := map[string]string{
-					"size":      "99",
-					"name":      "rich",
-					"active":    "true",
-					"category":  "food",
-					"tags":      "tag1,tag2,tag3",
-					"threshold": "3.14",
-				}
-				return makeValues(50, fields)
-			},
-			fn: func(v url.Values) error {
-				var f LargeFilter
-				return Parse(v, &f)
-			},
-		},
-		{
-			name: "LargeWithDate",
-			makeVal: func() url.Values {
-				fields := map[string]string{
-					"size":      "99",
-					"name":      "rich",
-					"active":    "true",
-					"category":  "food",
-					"tags":      "tag1,tag2,tag3",
-					"threshold": "3.14",
-					"start":     "2025-07-04T17:12:32.123+07:00",
-					"end":       "2025-10-04T17:12:32.123+07:00",
-				}
-				return makeValues(50, fields)
-			},
-			fn: func(v url.Values) error {
-				var f LargeFilter
-				return Parse(v, &f)
-			},
-		},
-	}
-
 	for _, tt := range tests {
-		vals := tt.makeVal()
-		b.ResetTimer()
-		b.Run(tt.name, func(b *testing.B) {
+		b.Run("Seq/"+tt.name, func(b *testing.B) {
+			b.ReportAllocs()
+			vals := tt.values()
+			b.ResetTimer()
 			for b.Loop() {
-				if err := tt.fn(vals); err != nil {
+				var f QFilter
+				if err := Parse(vals, &f); err != nil {
 					b.Fatal(err)
 				}
 			}
 		})
 	}
+
+	// Benchmark Parallel measures cache behavior under concurrent load similar to HTTP handlers.
+	for _, tt := range tests {
+		b.Run("Par/"+tt.name, func(b *testing.B) {
+			b.ReportAllocs()
+			vals := tt.values()
+			b.ResetTimer()
+			b.RunParallel(func(pb *testing.PB) {
+				for pb.Next() {
+					var f QFilter
+					if err := Parse(vals, &f); err != nil {
+						b.Fatal(err)
+					}
+				}
+			})
+		})
+	}
 }
 
-func makeValues(nIDs int, extra map[string]string) url.Values {
+func makeIDSlice(n int) url.Values {
 	v := url.Values{}
-
-	ids := make([]string, nIDs)
-	for i := range ids {
-		ids[i] = strconv.Itoa(i + 1)
+	for i := range n {
+		v.Add("ids", strconv.Itoa(i+1))
 	}
-	v.Set("ids", strings.Join(ids, ","))
 
-	for k, val := range extra {
-		v.Set(k, val)
+	return v
+}
+
+func makeCategorySlice(n int) url.Values {
+	v := url.Values{}
+	for i := range n {
+		v.Add("categories", strconv.Itoa(i+1))
 	}
 
 	return v
